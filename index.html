@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>cc-tools — Claude Code tool usage distribution</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0d1117;
+    color: #c9d1d9;
+    font-family: 'SF Mono', 'Consolas', 'Cascadia Code', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+  }
+  h1 { font-size: 1.5rem; color: #ffa657; margin-bottom: 6px; }
+  .subtitle { color: #8b949e; font-size: 0.875rem; margin-bottom: 32px; }
+
+  .drop-zone {
+    border: 2px dashed #30363d;
+    border-radius: 12px;
+    padding: 48px 64px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    max-width: 480px;
+    width: 100%;
+    margin-bottom: 32px;
+  }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: #ffa657; background: rgba(255,166,87,0.05); }
+  .drop-text { color: #8b949e; font-size: 0.875rem; line-height: 1.6; }
+  .drop-text strong { color: #c9d1d9; }
+  #file-input { display: none; }
+
+  .result { display: none; max-width: 640px; width: 100%; }
+  .result.visible { display: block; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+  .card-title { color: #8b949e; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+
+  .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 0; }
+  .stat-item { text-align: center; }
+  .stat-val { font-size: 1.4rem; color: #ffa657; font-weight: 700; }
+  .stat-lbl { font-size: 0.7rem; color: #8b949e; margin-top: 2px; }
+
+  .tab-row { display: flex; gap: 8px; margin-bottom: 16px; }
+  .tab-btn { background: none; border: 1px solid #30363d; color: #8b949e; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 0.8rem; transition: all 0.2s; }
+  .tab-btn.active { border-color: #ffa657; color: #ffa657; background: rgba(255,166,87,0.1); }
+  .tab-btn:hover:not(.active) { border-color: #8b949e; color: #c9d1d9; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .bar-chart { font-size: 0.8rem; }
+  .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .bar-label { width: 100px; text-align: right; color: #c9d1d9; flex-shrink: 0; font-size: 0.78rem; }
+  .bar-track { flex: 1; height: 14px; background: #21262d; border-radius: 3px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+  .bar-count { width: 100px; color: #8b949e; text-align: right; flex-shrink: 0; font-size: 0.75rem; }
+
+  /* Category colors */
+  .cat-explorer    { background: #58d8f0; }
+  .cat-executor    { background: #ffa657; }
+  .cat-builder     { background: #56d364; }
+  .cat-orchestrator{ background: #d2a8ff; }
+  .cat-researcher  { background: #79c0ff; }
+  .cat-mcp         { background: #f0883e; }
+  .cat-communicator{ background: #e3b341; }
+  .cat-other       { background: #8b949e; }
+
+  /* Tool colors based on category */
+  .tool-Read,.tool-Grep,.tool-Glob { background: #58d8f0; }
+  .tool-Bash { background: #ffa657; }
+  .tool-Edit,.tool-Write,.tool-NotebookEdit { background: #56d364; }
+  .tool-Task,.tool-TaskCreate,.tool-TaskUpdate,.tool-TaskList,.tool-TaskGet,.tool-TaskOutput,.tool-TodoWrite,.tool-ExitPlanMode,.tool-EnterPlanMode,.tool-AskUserQuestion,.tool-Agent { background: #d2a8ff; }
+  .tool-WebSearch,.tool-WebFetch { background: #79c0ff; }
+  .tool-mcp { background: #f0883e; }
+  .tool-SendMessage,.tool-TeamCreate,.tool-TeamDelete { background: #e3b341; }
+  .tool-other { background: #8b949e; }
+
+  .reset-btn { margin-top: 16px; background: none; border: 1px solid #30363d; color: #8b949e; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 0.8rem; display: block; width: 100%; transition: all 0.2s; }
+  .reset-btn:hover { border-color: #ffa657; color: #ffa657; }
+  .footer { color: #8b949e; font-size: 0.75rem; text-align: center; margin-top: 12px; }
+  .footer a { color: #ffa657; text-decoration: none; }
+  .footer a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<h1>🔧 cc-tools</h1>
+<p class="subtitle">Which tools does your Claude Code AI call most?</p>
+
+<div class="drop-zone" id="drop-zone">
+  <div style="font-size:2.5rem;margin-bottom:12px;">📁</div>
+  <div class="drop-text">
+    <strong>Drop your ~/.claude folder here</strong><br>
+    or click to select<br><br>
+    Reads session files locally.<br>
+    Nothing is uploaded.
+  </div>
+  <input type="file" id="file-input" webkitdirectory multiple accept=".jsonl">
+</div>
+
+<div class="result" id="result">
+  <div class="card">
+    <div class="card-title">Tool Call Summary</div>
+    <div class="stats-grid">
+      <div class="stat-item"><div class="stat-val" id="stat-total">—</div><div class="stat-lbl">total calls</div></div>
+      <div class="stat-item"><div class="stat-val" id="stat-unique">—</div><div class="stat-lbl">unique tools</div></div>
+      <div class="stat-item"><div class="stat-val" id="stat-top">—</div><div class="stat-lbl">top tool</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="tab-row">
+      <button class="tab-btn active" data-tab="top">Top Tools</button>
+      <button class="tab-btn" data-tab="categories">Categories</button>
+    </div>
+    <div class="tab-panel active" id="tab-top">
+      <div class="bar-chart" id="top-chart"></div>
+    </div>
+    <div class="tab-panel" id="tab-categories">
+      <div class="bar-chart" id="cat-chart"></div>
+    </div>
+  </div>
+
+  <button class="reset-btn" id="reset-btn">← Analyze another folder</button>
+</div>
+
+<div class="footer">
+  <a href="https://github.com/yurukusa/cc-tools" target="_blank">cc-tools</a> ·
+  Part of <a href="https://yurukusa.github.io/cc-toolkit/" target="_blank">cc-toolkit</a> · 51 free tools for Claude Code
+</div>
+
+<script>
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+const resultEl = document.getElementById('result');
+const resetBtn = document.getElementById('reset-btn');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); processFiles(e.dataTransfer.files); });
+fileInput.addEventListener('change', () => processFiles(fileInput.files));
+resetBtn.addEventListener('click', () => { resultEl.classList.remove('visible'); dropZone.style.display = ''; fileInput.value = ''; });
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+const CATEGORIES = {
+  Explorer: ['Read','Grep','Glob'],
+  Executor: ['Bash'],
+  Builder: ['Edit','Write','NotebookEdit'],
+  Orchestrator: ['Task','TaskCreate','TaskUpdate','TaskList','TaskGet','TaskOutput','TodoWrite','ExitPlanMode','EnterPlanMode','AskUserQuestion','Agent'],
+  Researcher: ['WebSearch','WebFetch'],
+  Communicator: ['SendMessage','TeamCreate','TeamDelete'],
+};
+
+function categorize(name) {
+  if (name.startsWith('mcp__')) return 'MCP';
+  for (const [cat, tools] of Object.entries(CATEGORIES)) {
+    if (tools.includes(name)) return cat;
+  }
+  return 'Other';
+}
+
+function getBarClass(name) {
+  const cat = categorize(name);
+  const knownTools = ['Read','Grep','Glob','Bash','Edit','Write','NotebookEdit',
+    'Task','TaskCreate','TaskUpdate','TaskList','TaskGet','TaskOutput','TodoWrite',
+    'ExitPlanMode','EnterPlanMode','AskUserQuestion','Agent',
+    'WebSearch','WebFetch','SendMessage','TeamCreate','TeamDelete'];
+  if (name.startsWith('mcp__')) return 'tool-mcp';
+  if (knownTools.includes(name)) return `tool-${name}`;
+  return `cat-${cat.toLowerCase()}`;
+}
+
+function getCatClass(cat) { return `cat-${cat.toLowerCase()}`; }
+
+async function processFiles(files) {
+  const jsonlFiles = Array.from(files).filter(f => {
+    const p = f.webkitRelativePath || f.name;
+    return p.endsWith('.jsonl') && !p.includes('/subagents/');
+  });
+  if (!jsonlFiles.length) { alert('No session files found.'); return; }
+  dropZone.style.display = 'none';
+
+  const toolCounts = {};
+  const BATCH = 30;
+  for (let i = 0; i < jsonlFiles.length; i += BATCH) {
+    await Promise.all(jsonlFiles.slice(i, i + BATCH).map(async f => {
+      try {
+        const text = await f.text();
+        const matches = text.match(/"type":"tool_use","id":"[^"]*","name":"([^"]+)"/g);
+        if (!matches) return;
+        for (const m of matches) {
+          const nm = m.match(/"name":"([^"]+)"/)?.[1];
+          if (nm) toolCounts[nm] = (toolCounts[nm]||0) + 1;
+        }
+      } catch {}
+    }));
+  }
+
+  const sorted = Object.entries(toolCounts).sort((a,b)=>b[1]-a[1]);
+  const total = sorted.reduce((s,[,c])=>s+c,0);
+  if (!total) { alert('No tool usage data found.'); return; }
+
+  document.getElementById('stat-total').textContent = total.toLocaleString();
+  document.getElementById('stat-unique').textContent = sorted.length;
+  document.getElementById('stat-top').textContent = sorted[0]?.[0] || '—';
+
+  const maxCount = sorted[0]?.[1] || 1;
+  const top15 = sorted.slice(0,15);
+  document.getElementById('top-chart').innerHTML = top15.map(([name,count]) => `
+    <div class="bar-row">
+      <div class="bar-label">${name}</div>
+      <div class="bar-track">
+        <div class="bar-fill ${getBarClass(name)}" style="width:${(count/maxCount*100).toFixed(1)}%"></div>
+      </div>
+      <div class="bar-count">${count.toLocaleString()} (${(count/total*100).toFixed(1)}%)</div>
+    </div>
+  `).join('');
+
+  // Categories
+  const catData = {};
+  for (const [name,count] of sorted) {
+    const cat = categorize(name);
+    catData[cat] = (catData[cat]||0) + count;
+  }
+  const catSorted = Object.entries(catData).sort((a,b)=>b[1]-a[1]);
+  const catMax = catSorted[0]?.[1]||1;
+  document.getElementById('cat-chart').innerHTML = catSorted.map(([cat,count]) => `
+    <div class="bar-row">
+      <div class="bar-label">${cat}</div>
+      <div class="bar-track">
+        <div class="bar-fill ${getCatClass(cat)}" style="width:${(count/catMax*100).toFixed(1)}%"></div>
+      </div>
+      <div class="bar-count">${count.toLocaleString()} (${(count/total*100).toFixed(1)}%)</div>
+    </div>
+  `).join('');
+
+  resultEl.classList.add('visible');
+}
+</script>
+</body>
+</html>
