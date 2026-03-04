@@ -80,7 +80,7 @@ Drag in your `~/.claude` folder. Shows top tools and category breakdown. Runs lo
 
 ## Part of cc-toolkit
 
-cc-tools is tool #51 in [cc-toolkit](https://yurukusa.github.io/cc-toolkit/) — 52 free tools for Claude Code users.
+cc-tools is tool #51 in [cc-toolkit](https://yurukusa.github.io/cc-toolkit/) — 60 free tools for Claude Code users.
 
 Related:
 - [cc-file-churn](https://github.com/yurukusa/cc-file-churn) — Most-modified files
