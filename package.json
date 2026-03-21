@@ -1,5 +1,5 @@
 {
-  "name": "cc-tools",
+  "name": "@yurukusa/cc-tools",
   "version": "1.0.0",
   "description": "Which tools does your Claude Code AI call most? Distribution of tool usage across sessions.",
   "type": "module",
